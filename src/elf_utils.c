@@ -5,7 +5,7 @@
 #include <stdio.h>
 #include <malloc.h>
 #include <elf.h>
-#include <elf_utils.h>
+#include "elf_utils.h"
 
 int get_elf_fd(const char *filename) 
 {
