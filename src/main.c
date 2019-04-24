@@ -8,28 +8,21 @@ int main(int argc, const char *argv[])
             return 1;
     }
 
-    int fd = get_elf_fd(argv[1]);
-    if (0 > fd) {
+    struct elf_context ctx = {0};
+    if (0 > init_elf(argv[1], &ctx)) {
         return 1;
     }
 
-    struct elf_data elf = {0};
-    if (0 > parse_elf(&elf, fd)) {
+    if (0 > parse_elf(&ctx)) {
         return 1;
     }
 
-    if (0 > mmap_elf_segments(&elf, fd)) {
+    if (0 > mmap_elf_segments(&ctx)) {
         return 1;
     }
 
-    /*if (0 > handle_relocations()) {
-            return 1;
-    }
+    run_elf_entry(&ctx);
 
-    if (0 > cleaunup_and_execute()) {
-            return 1;
-    }*/
-
-    fprintf(stderr, "should never reach here\n");
+    // should never get here
     return 1;
 }
