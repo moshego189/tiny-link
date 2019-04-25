@@ -5,7 +5,7 @@
 #include <stdio.h>
 #include <malloc.h>
 #include <elf.h>
- #include <sys/mman.h>
+#include <sys/mman.h>
 #include "elf_utils.h"
 
 static int parse_elf_header(struct elf_context *ctx);
@@ -143,7 +143,7 @@ int mmap_elf_segments(struct elf_context *ctx)
             if (MAP_FAILED == mmap((void *)vaddr + filesz, 
                                    (ctx->program_header[i].p_vaddr + ctx->program_header[i].p_memsz) - (vaddr + filesz),
                                    ctx->program_header[i].p_flags,
-                                   MAP_PRIVATE|MAP_FIXED|MAP_ANONYMOUS,-1, 0)) {
+                                   MAP_PRIVATE|MAP_FIXED|MAP_ANONYMOUS, -1, 0)) {
                 perror("mmap");
                 return -1;     
             }
