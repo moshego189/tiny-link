@@ -6,6 +6,10 @@
 #include <malloc.h>
 #include <elf.h>
 #include <sys/mman.h>
+#include <string.h>
+#include <sys/user.h>
+
+#include "align.h"
 #include "elf_utils.h"
 
 static int parse_elf_header(struct elf_context *ctx);
@@ -122,28 +126,34 @@ error:
 
 int mmap_elf_segments(struct elf_context *ctx)
 {
-    for(int i = 0; i < ctx->header.e_phnum; i++) {
+    for (int i = 0; i < ctx->header.e_phnum; i++) {
         printf("parsing segment %d, type=0x%08x\n", i, ctx->program_header[i].p_type);
 
         if (PT_LOAD == ctx->program_header[i].p_type) {
-            Elf64_Addr vaddr = ctx->program_header[i].p_vaddr & -0x1000;
-            Elf64_Off offset = ctx->program_header[i].p_offset & -0x1000;
-            Elf64_Xword filesz = (ctx->program_header[i].p_filesz + (0x1000 - 1)) & -0x1000; 
+            uint64_t vaddr_aligned = ALIGN_DOWN(ctx->program_header[i].p_vaddr, PAGE_SIZE);
+            uint64_t start_offset_aligned = ALIGN_DOWN(ctx->program_header[i].p_offset, PAGE_SIZE);
+            uint64_t end_offset_aligned = ALIGN_UP(ctx->program_header[i].p_offset + ctx->program_header[i].p_filesz, PAGE_SIZE);
+            uint64_t filesz_aligned = end_offset_aligned - start_offset_aligned;
 
-            if (MAP_FAILED == mmap((void *)vaddr, filesz, ctx->program_header[i].p_flags,
-                                   MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, ctx->fd, offset)) {
+            if (MAP_FAILED == mmap((void *)vaddr_aligned, filesz_aligned, ctx->program_header[i].p_flags,
+                                   MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, ctx->fd, start_offset_aligned)) {
                 perror("mmap");
                 return -1;     
             }
 
-            if (ctx->program_header[i].p_filesz == ctx->program_header[i].p_memsz) {
+            if (0 == start_offset_aligned) {
+                ctx->elf_base = (Elf64_Ehdr *)vaddr_aligned;
+            }
+
+            uint64_t mmap_physical_end = vaddr_aligned + filesz_aligned;
+            uint64_t mmap_virtual_end = ctx->program_header[i].p_vaddr + ctx->program_header[i].p_memsz;
+            if (mmap_virtual_end <= mmap_physical_end) {
                 continue;
             }
 
-            if (MAP_FAILED == mmap((void *)vaddr + filesz, 
-                                   (ctx->program_header[i].p_vaddr + ctx->program_header[i].p_memsz) - (vaddr + filesz),
-                                   ctx->program_header[i].p_flags,
-                                   MAP_PRIVATE|MAP_FIXED|MAP_ANONYMOUS, -1, 0)) {
+            uint64_t mmap_virtual_size = mmap_virtual_end - mmap_physical_end;
+            if (MAP_FAILED == mmap((void *)mmap_physical_end, mmap_virtual_size, ctx->program_header[i].p_flags,
+                                    MAP_PRIVATE|MAP_FIXED|MAP_ANONYMOUS, -1, 0)) {
                 perror("mmap");
                 return -1;     
             }
@@ -153,7 +163,34 @@ int mmap_elf_segments(struct elf_context *ctx)
     return 0;
 }
 
-void run_elf_entry(struct elf_context *ctx) 
+void fix_auxv(struct elf_context *ctx, const char *envp[]) 
 {
-    ((void (*)(void))ctx->header.e_entry)();
+    Elf32_auxv_t *auxv;
+    while (*envp++ != NULL);
+
+    for (auxv = (Elf32_auxv_t *)envp; auxv->a_type != AT_NULL; auxv++) {
+        if (auxv->a_type == AT_PHDR) {
+            auxv->a_un.a_val = (uint64_t)ctx->elf_base + ctx->header.e_phoff;
+        }
+        else if (auxv->a_type == AT_PHNUM) {
+            auxv->a_un.a_val = ctx->header.e_phnum;
+        }
+    }
+}
+
+void fix_argv(const char *argv[])
+{   
+    uint64_t *stack = (uint64_t *)argv;
+    stack[0] = stack[-1] - 1;
+}
+
+void run_elf_entry(struct elf_context *ctx, const char *argv[]) 
+{
+    __asm__(
+        "mov    %0,%%rsp;"
+        "mov    %1,%%rbx;"
+        "mov    $0,%%rdx;"
+        "jmp    *%%rbx;"
+        :: "r" (argv), "r" (ctx->header.e_entry)
+    );
 }

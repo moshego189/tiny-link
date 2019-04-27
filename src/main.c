@@ -1,10 +1,10 @@
 #include <stdio.h>
 #include "elf_utils.h"
 
-int main(int argc, const char *argv[]) 
+int main(int argc, const char *argv[], const char *envp[]) 
 {
-    if (2 != argc) {
-            fprintf(stderr, "Usage: %s [elf]\n", argv[0]); 
+    if (2 > argc) {
+            fprintf(stderr, "Usage: %s [elf] args...\n", argv[0]); 
             return 1;
     }
 
@@ -21,7 +21,10 @@ int main(int argc, const char *argv[])
         return 1;
     }
 
-    run_elf_entry(&ctx);
+    fix_auxv(&ctx, envp);
+    fix_argv(argv);
+
+    run_elf_entry(&ctx, argv);
 
     // should never get here
     return 1;
