@@ -13,7 +13,7 @@ LDFLAGS := -static-pie
 all: $(BIN_DIR)/ld.so $(BIN_DIR)/dummy.elf 
 
 $(BIN_DIR)/dummy.elf: dummy/dummy.c
-	$(CC) -s -nostdlib -static -o $@ $^ 
+	$(CC) $(CFLAGS) -s -nostdlib -static -o $@ $^ 
 
 $(BIN_DIR)/ld.so: $(OBJ_FILES)
 	$(CC) $(LDFLAGS) -o $@ $^
