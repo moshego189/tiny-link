@@ -1,35 +1,31 @@
 #include <stdio.h>
 #include "elf_utils.h"
 
-int main(int argc, const char *argv[]) 
+int main(int argc, const char *argv[], const char *envp[]) 
 {
-    if (2 != argc) {
-            fprintf(stderr, "Usage: %s [elf]\n", argv[0]); 
+    if (2 > argc) {
+            fprintf(stderr, "Usage: %s [elf] args...\n", argv[0]); 
             return 1;
     }
 
-    int fd = get_elf_fd(argv[1]);
-    if (0 > fd) {
+    struct elf_context ctx = {0};
+    if (0 > init_elf(argv[1], &ctx)) {
         return 1;
     }
 
-    struct elf_data elf = {0};
-    if (0 > parse_elf(&elf, fd)) {
+    if (0 > parse_elf(&ctx)) {
         return 1;
     }
 
-    if (0 > mmap_elf_segments(&elf, fd)) {
+    if (0 > mmap_elf_segments(&ctx)) {
         return 1;
     }
 
-    /*if (0 > handle_relocations()) {
-            return 1;
-    }
+    fix_auxv(&ctx, envp);
+    fix_argv(argv);
 
-    if (0 > cleaunup_and_execute()) {
-            return 1;
-    }*/
+    run_elf_entry(&ctx, argv);
 
-    fprintf(stderr, "should never reach here\n");
+    // should never get here
     return 1;
 }
