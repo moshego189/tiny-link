@@ -22,7 +22,8 @@ static const char *level_colors[] = {
   "\x1b[35m"
 };
 
-void log_log(int level, const char *file, int line, const char *fmt, ...) {
+void log_log(int level, const char *file, int line, const char *fmt, ...)
+{
   fprintf(stderr, "%s%-5s\x1b[0m \x1b[90m%s:%d:\x1b[0m ", level_colors[level], level_names[level], file, line);
 
   va_list args;
