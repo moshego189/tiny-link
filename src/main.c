@@ -2,6 +2,7 @@
 
 #include "elf_utils.h"
 #include "log.h"
+#include "env.h"
 
 int main(int argc, const char *argv[], const char *envp[]) 
 {
@@ -9,6 +10,10 @@ int main(int argc, const char *argv[], const char *envp[])
         fprintf(stderr, "Usage: %s [elf] args...\n", argv[0]); 
         goto error;
     }
+
+    if (0 > init_env()) {
+        goto error;
+    } 
     
     log_info("Got an Elf file: %s", argv[1]);
     
