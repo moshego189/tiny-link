@@ -16,6 +16,8 @@
 static int mmap_pt_load(struct elf_context *ctx, Elf64_Phdr *phdr);
 static int parse_elf_header(struct elf_context *ctx);
 static int parse_elf_program_header(struct elf_context *ctx);
+static int parse_elf_section_header(struct elf_context *ctx);
+static int parse_elf_strtab(struct elf_context *ctx);
 
 int init_elf(const char *filename, struct elf_context *ctx)
 {
@@ -41,6 +43,14 @@ int parse_elf(struct elf_context *ctx)
     }
 
     if (0 > parse_elf_program_header(ctx)) {
+        goto error;
+    }
+
+    if (0 > parse_elf_section_header(ctx)) {
+        goto error;
+    }
+
+    if (0 > parse_elf_strtab(ctx)) {
         goto error;
     }
 
@@ -110,7 +120,7 @@ static int parse_elf_program_header(struct elf_context *ctx)
     }
 
     uint32_t phsize = sizeof(Elf64_Phdr) * ctx->header.e_phnum;
-    log_debug("Allocting program header, phnum=%d, phsize=%d", ctx->header.e_phnum, phsize);
+    log_debug("Allocating program header, phnum=%d, phsize=%d", ctx->header.e_phnum, phsize);
 
     ctx->program_header = malloc(phsize);
     if (NULL == ctx->program_header) {
@@ -137,6 +147,119 @@ error:
     }
 
     return -1;
+}
+
+static int parse_elf_section_header(struct elf_context *ctx)
+{
+    if (0 == ctx->header.e_shoff) {
+        log_error("Elf has no section header, probably stripped EXEC");
+        goto error;
+    }
+
+    if (0 == ctx->header.e_shnum) {
+        log_error("Elf has no section header entries");
+        goto error;
+    }
+
+    uint32_t shsize = sizeof(Elf64_Shdr) * ctx->header.e_shnum;
+    log_debug("Allocating section header, shnum=%d, shsize=%d", ctx->header.e_shnum, shsize);
+
+    ctx->section_header = malloc(shsize);
+    if (NULL == ctx->section_header) {
+        log_errno("malloc()");
+        goto error;
+    }
+
+    if (0 > lseek(ctx->fd, ctx->header.e_shoff , SEEK_SET)) {
+        log_errno("lseek()");
+        goto error;
+    }
+
+    if (0 > read(ctx->fd, ctx->section_header, shsize)) {
+        log_errno("read()");
+        goto error;
+    }
+
+    return 0;
+
+error:
+    if (NULL != ctx->section_header) {
+        free(ctx->section_header);
+        ctx->section_header = NULL;
+    }
+
+    return -1;
+}
+
+static int parse_elf_strtab(struct elf_context *ctx)
+{
+    if (NULL == ctx->section_header) {
+	log_error("Elf does not have section header");
+	goto error;
+    }
+
+    if (SHN_UNDEF == ctx->header.e_shstrndx) {
+	log_error("Undefined section header string table");
+	goto error;
+    }
+	
+    ctx->shstrtab = malloc(ctx->section_header[ctx->header.e_shstrndx].sh_size);
+    if (NULL == ctx->shstrtab) {
+	log_errno("malloc()");
+	goto error;
+    }
+
+    if (0 > lseek(ctx->fd, ctx->section_header[ctx->header.e_shstrndx].sh_offset , SEEK_SET)) {
+        log_errno("lseek()");
+        goto error;
+    }
+
+    if (0 > read(ctx->fd, ctx->shstrtab, ctx->section_header[ctx->header.e_shstrndx].sh_size)) {
+        log_errno("read()");
+        goto error;
+    }
+
+    int dynstr_idx = -1;
+    for (int i = 0 ; i < ctx->header.e_shnum ; ++i) {
+	if (!strcmp(DYNSTR_NAME, (const char*)ctx->shstrtab + ctx->section_header[i].sh_name)) {
+	    dynstr_idx = i;
+            break;
+	}
+    }
+
+    if (-1 == dynstr_idx) {
+	log_error("No dynamic string table");
+	goto error;
+    }
+
+    ctx->dynstr = malloc(ctx->section_header[dynstr_idx].sh_size);
+    if (NULL == ctx->dynstr) {
+	log_errno("malloc()");
+	goto error;
+    }
+
+    if (0 > lseek(ctx->fd, ctx->section_header[dynstr_idx].sh_offset , SEEK_SET)) {
+        log_errno("lseek()");
+        goto error;
+    }
+
+    if (0 > read(ctx->fd, ctx->dynstr, ctx->section_header[dynstr_idx].sh_size)) {
+        log_errno("read()");
+        goto error;
+    }
+
+    return 0;
+
+error:
+    if (NULL == ctx->shstrtab) {
+	free(ctx->shstrtab);
+    }
+	
+    if (NULL == ctx->dynstr) {
+	free(ctx->dynstr);
+    }
+
+    return 1;
 }
 
 int mmap_elf_segments(struct elf_context *ctx)
