@@ -3,10 +3,16 @@
 
 #include <elf.h>
 
+#define DYNSTR_NAME ".dynstr"
+
 struct elf_context {
     int fd;
     Elf64_Ehdr header;
     Elf64_Phdr *program_header;
+    Elf64_Shdr *section_header;
+    Elf64_Shdr *shstrtab;
+    Elf64_Shdr *strtab;
+    Elf64_Shdr *dynstr;
     Elf64_Ehdr *elf_base;
 };
 

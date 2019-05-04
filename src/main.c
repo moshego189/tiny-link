@@ -1,6 +1,7 @@
 #include <stdio.h>
 
 #include "elf_utils.h"
+#include "dyn.h"
 #include "log.h"
 #include "env.h"
 
@@ -35,6 +36,14 @@ int main(int argc, const char *argv[], const char *envp[])
     log_info("Fixing argv and auxv");
     fix_argv(argv);
     fix_auxv(&ctx, envp);
+
+    log_info("Checking if its dynamic");
+    if (is_dynamic(&ctx)) {
+	find_needed_objects(&ctx);
+
+	log_info("Currently dynamic linkage is not supported");
+	return 1;
+    }
 
     log_info("Running Elf entry");
     run_elf_entry(&ctx, argv);
